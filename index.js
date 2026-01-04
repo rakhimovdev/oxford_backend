@@ -1,29 +1,37 @@
 const { Telegraf, Markup } = require('telegraf');
 const express = require('express');
+const app = express();
 
 // ================= CONFIG =================
-// Tokenni Render Environment Variables'ga BOT_TOKEN nomi bilan qo'shing
-const BOT_TOKEN = process.env.BOT_TOKEN || '8596224787:AAF3sfvslPI8o37HOIy2JX9CeQV0YD80rxQ';
+const BOT_TOKEN = '8596224787:AAF3sfvslPI8o37HOIy2JX9CeQV0YD80rxQ';
 const bot = new Telegraf(BOT_TOKEN);
 
-const app = express();
 const PORT = process.env.PORT || 3000;
-const DOMAIN = process.env.RENDER_EXTERNAL_URL; // Render avtomatik taqdim etadi
 
 // ================= CHANNELS =================
+
+// MAIN CHANNEL (PRIVATE)
 const MAIN_CHANNEL_ID = -1002252811755;
 const MAIN_CHANNEL_LINK = 'https://t.me/+HV8FCBr6RcA4ZTc6';
 
+// ALL CHANNELS
 const allChannels = [
-  { id: MAIN_CHANNEL_ID, title: 'First Channel', link: MAIN_CHANNEL_LINK },
-  { id: '@abdurahmonielts', title: 'Second Channel', link: 'https://t.me/abdurahmonielts' }
+  {
+    id: MAIN_CHANNEL_ID,
+    title: 'First Channel',
+    link: MAIN_CHANNEL_LINK
+  },
+  {
+    id: '@abdurahmonielts',
+    title: 'Second Channel',
+    link: 'https://t.me/abdurahmonielts'
+  }
 ];
 
+// Referral tekshiruv uchun
 const otherChannels = ['@abdurahmonielts'];
 
-// ================= STORAGE (Vaqtinchalik) =================
-// Eslatma: Render har safar restart bo'lganda bu ma'lumotlar o'chib ketadi.
-// Doimiy saqlash uchun MongoDB yoki PostgreSQL ulanishi kerak.
+// ================= STORAGE =================
 const users = {};
 const invitations = {};
 
@@ -47,43 +55,63 @@ async function showButtons(ctx) {
 
   const allJoined = joinedStatus.every(Boolean);
 
+  // Agar hali hamma kanalga qo‘shilmagan bo‘lsa
   if (!allJoined) {
     allChannels.forEach((ch, i) => {
       if (!joinedStatus[i]) {
-        buttons.push([Markup.button.url(ch.title, ch.link)]);
+        buttons.push([
+          Markup.button.url(ch.title, ch.link)
+        ]);
       }
     });
 
-    buttons.push([Markup.button.callback('Kanallarni tekshirish ✅', 'final_check')]);
+    buttons.push([
+      Markup.button.callback('Kanallarni tekshirish ✅', 'final_check')
+    ]);
 
-    return ctx.reply('📌 Botdan foydalanish uchun quyidagi kanallarga a’zo bo‘ling:', Markup.inlineKeyboard(buttons));
+    return ctx.reply(
+      '📌 Quyidagi kanallarga a’zo bo‘ling:',
+      Markup.inlineKeyboard(buttons)
+    );
   }
 
-  buttons.push([Markup.button.callback('Referral havolangiz 🔗', 'show_referral')]);
-  buttons.push([Markup.button.callback('Qo‘shilganlar soni 👥', 'check_friends')]);
+  // Agar hamma kanalga qo‘shilgan bo‘lsa
+  buttons.push([
+    Markup.button.callback('Referral havolangiz', 'show_referral')
+  ]);
 
-  return ctx.reply('✅ Siz barcha kanallarga muvaffaqiyatli qo‘shildingiz!', Markup.inlineKeyboard(buttons));
+  buttons.push([
+    Markup.button.callback('Qo‘shilganlar soni', 'check_friends')
+  ]);
+
+  return ctx.reply(
+    '✅ Siz barcha kanallarga muvaffaqiyatli qo‘shildingiz!',
+    Markup.inlineKeyboard(buttons)
+  );
 }
 
-// ================= BOT LOGIC =================
+// ================= START =================
 bot.start(async (ctx) => {
   const userId = ctx.from.id;
   const payload = ctx.startPayload;
 
   if (payload && payload.startsWith('ref')) {
     const invitedBy = Number(payload.slice(3));
-    if (invitedBy !== userId) { // O'zini o'zi taklif qilmasligi uchun
-      if (!invitations[invitedBy]) invitations[invitedBy] = [];
-      if (!invitations[invitedBy].includes(userId)) {
-        invitations[invitedBy].push(userId);
-      }
+    if (!invitations[invitedBy]) invitations[invitedBy] = [];
+    if (!invitations[invitedBy].includes(userId)) {
+      invitations[invitedBy].push(userId);
     }
+    users[userId] = { invitedBy };
+  } else {
+    users[userId] = {};
   }
+
   await showButtons(ctx);
 });
 
+// ================= ACTIONS =================
 bot.action('final_check', async (ctx) => {
-  await ctx.answerCbQuery('Tekshirilmoqda...');
+  await ctx.answerCbQuery();
   await showButtons(ctx);
 });
 
@@ -93,10 +121,16 @@ bot.action('show_referral', async (ctx) => {
   const referralLink = `https://t.me/${botUsername}?start=ref${userId}`;
 
   await ctx.answerCbQuery();
-  await ctx.reply(`🎯 *Do‘stlaringizni taklif qiling!*\n\nSizning referral havolangiz:\n${referralLink}`, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([[Markup.button.url('🚀 Botga kirish', referralLink)]])
-  });
+
+  await ctx.reply(
+    `🎯 *Do‘stlaringizni taklif qiling!*\n\nQuyidagi tugma orqali botga kirish mumkin 👇`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.url('🚀 Botga kirish', referralLink)]
+      ])
+    }
+  );
 });
 
 bot.action('check_friends', async (ctx) => {
@@ -116,32 +150,22 @@ bot.action('check_friends', async (ctx) => {
   }
 
   await ctx.answerCbQuery();
-  await ctx.reply(`👥 Barcha kanallarga qo‘shilgan do‘stlaringiz soni: ${ready}`);
+  await ctx.reply(`👥 Barcha kanallarga qo‘shilgan do‘stlaringiz: ${ready}`);
 });
 
-// ================= SERVER & WEBHOOK =================
+// ================= BOT LAUNCH (POLLING) =================
+bot.launch();
+console.log('🤖 Bot polling orqali ishga tushdi');
 
-// Render botni "tirik" deb hisoblashi uchun asosiy sahifa
+// ================= EXPRESS (Render uchun) =================
 app.get('/', (req, res) => {
-  res.send('🤖 Bot is running 24/7 with Webhook!');
+  res.send('🤖 Telegram bot is running');
 });
-
-// Webhook yoki Pollingni tanlash
-if (DOMAIN) {
-  // Render'da ishlayotganda (Webhook)
-  app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
-  bot.telegram.setWebhook(`${DOMAIN}/bot${BOT_TOKEN}`);
-  console.log(`🚀 Webhook o'rnatildi: ${DOMAIN}`);
-} else {
-  // Lokal kompyuterda (Polling)
-  bot.launch();
-  console.log('🤖 Polling ishga tushdi (Local)');
-}
 
 app.listen(PORT, () => {
   console.log(`🌐 Express server ${PORT}-portda ishlayapti`);
 });
 
-// To'g'ri o'chirish (Graceful shutdown)
+// ================= GRACEFUL STOP =================
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
